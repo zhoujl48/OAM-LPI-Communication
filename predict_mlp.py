@@ -39,8 +39,8 @@ if __name__ == '__main__':
     args = parse()
     noise = args.noise
     bias = args.bias
-    pred_data_path = 'dataset/test_noise_{:04d}_bias_{:03d}.json'.format(int(1000 * noise), bias)
-    train_data_path = 'dataset/noise_{:04d}_bias_{:03d}.json'.format(int(1000 * noise), bias)
+    pred_data_path = 'dataset/K_15/test_noise_{:04d}_bias_{:03d}.json'.format(int(1000 * noise), bias)
+    train_data_path = 'dataset/K_15/noise_{:04d}_bias_{:03d}.json'.format(int(1000 * noise), bias)
     model_dir = 'model/mlp/noise_{:04d}_bias_{:03d}'.format(int(1000 * noise), bias)
     model_name = sorted(os.listdir(model_dir))[-1]
     model_path = os.path.join(model_dir, model_name)
@@ -70,6 +70,7 @@ if __name__ == '__main__':
     acc = accuracy_score(y_true, y_pred)
     c_matrix = confusion_matrix(y_true, y_pred).tolist()
     results['acc'] = acc
+    print(acc)
     results['confusion_matrix'] = c_matrix
-    with open('evaluation/mlp/noise_{:04d}_bias_{:03d}.json'.format(int(1000 * noise), bias), 'w') as f:
+    with open('evaluation/K_15/mlp/noise_{:04d}_bias_{:03d}.json'.format(int(1000 * noise), bias), 'w') as f:
         json.dump(results, f, indent=4, sort_keys=True)

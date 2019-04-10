@@ -15,6 +15,7 @@ import os
 import json
 import argparse
 import logging
+from sklearn.preprocessing import StandardScaler
 from sklearn import svm
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import accuracy_score, confusion_matrix
@@ -31,7 +32,7 @@ PARAMS_OPTIMIZE = [
     # },
     {
         'kernel': ['linear'],
-        'C': [0.0001, 0.001, 0.1, 0.2, 0.5, 1, 5, 10],
+        'C': [0.0001, 0.001, 0.1, 0.2, 0.5, 1, 5, 10, 50, 100],
     }
 ]
 
@@ -52,12 +53,12 @@ def load_data(filename):
     return X, y
 
 
-def save_results(results, noise, bias):
+def save_results(results, noise, bias, K):
     """结果保存JSON
     每组数据集参数，保存一个结果文件
     """
     save_name = 'noise_{:04d}_bias_{:03d}.json'.format(int(noise * 1000), bias)
-    save_path = os.path.join('evaluation', 'svm', save_name)
+    save_path = os.path.join('evaluation', 'K_{:02d}'.format(K), 'svm', save_name)
 
     with open(save_path, 'w') as f:
         json.dump(results, f, indent=4, sort_keys=True)
@@ -104,45 +105,31 @@ if __name__ == '__main__':
     init_log('logs/svm_search')
 
     # 参数设置
-    parser = argparse.ArgumentParser()
-    parser.add_argument('mode', help='search on single dataset or the total dataset, \'single\' or \'total\'', default='total')
-    parser.add_argument('--noise', type=float)
-    parser.add_argument('--bias', type=int)
+    parser = argparse.ArgumentParser(''
+                                     'Usage: python classifier_svm.py --K 7')
+    parser.add_argument('--K', type=int)
     args = parser.parse_args()
-    mode = args.mode
+    K = args.K
 
 
-    # 若指定数据集参数，则只对该数据集训练模型
-    if args.mode is 'single':
+    for noise in PARAMS_DATASET['noise']:
+        for bias in PARAMS_DATASET['bias']:
 
-        # 加载数据
-        logging.info('Loading dataset of noise({}) and bias({})...'.format(args.noise, args.bias))
-        data_train = 'dataset/noise_{:04d}_bias_{:03d}.json'.format(int(args.noise * 1000), args.bias)
-        data_test = 'dataset/test_noise_{:04d}_bias_{:03d}.json'.format(int(args.noise * 1000), args.bias)
-        X_train, y_train = load_data(data_train)
-        X_test, y_test = load_data(data_test)
+            # 加载数据
+            logging.info('Loading dataset of noise({}) and bias({})...'.format(noise, bias))
+            data_train = 'dataset/K_{:02d}/noise_{:04d}_bias_{:03d}.json'.format(K, int(noise * 1000), bias)
+            data_test = 'dataset/K_{:02d}/test_noise_{:04d}_bias_{:03d}.json'.format(K, int(noise * 1000), bias)
+            X_train, y_train = load_data(data_train)
+            X_test, y_test = load_data(data_test)
 
-        # 网格搜索，模型评估
-        logging.info('Searching best SVM...'.format(args.noise, args.bias))
-        results = best_model_and_results(X_train, y_train, X_test, y_test)
-        print(results)
+            # 数据标准化
+            scaler = StandardScaler().fit(X_train)
+            X_scaled_train = scaler.transform(X_train)
+            X_scaled_test = scaler.transform(X_test)
 
-
-    # 遍历所有数据集
-    else:
-        for noise in PARAMS_DATASET['noise']:
-            for bias in PARAMS_DATASET['bias']:
-
-                # 加载数据
-                logging.info('Loading dataset of noise({}) and bias({})...'.format(noise, bias))
-                data_train = 'dataset/noise_{:04d}_bias_{:03d}.json'.format(int(noise * 1000), bias)
-                data_test = 'dataset/test_noise_{:04d}_bias_{:03d}.json'.format(int(noise * 1000), bias)
-                X_train, y_train = load_data(data_train)
-                X_test, y_test = load_data(data_test)
-
-                # 网格搜索，效果评估
-                logging.info('Searching best SVM for dataset of noise({}) and bias({})...'.format(noise, bias))
-                results = best_model_and_results(X_train, y_train, X_test, y_test)
-                save_results(results, noise, bias)
+            # 网格搜索，效果评估
+            logging.info('Searching best SVM for dataset of noise({}) and bias({})...'.format(noise, bias))
+            results = best_model_and_results(X_scaled_train, y_train, X_scaled_test, y_test)
+            save_results(results, noise, bias, K=K)
 
 

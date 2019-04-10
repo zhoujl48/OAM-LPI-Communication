@@ -13,7 +13,7 @@ Date: 2019-03-08
 """
 
 # Config
-WORK_DIR = '/Users/zhoujl/workspace/oam'
+WORK_DIR = '.'
 SIZE_ONE_SAMPLE = 30
 NUM_CLASSES = 16
 NUM_EACH_CLASS = 100

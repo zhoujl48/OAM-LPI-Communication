@@ -96,7 +96,8 @@ class MLPModel(object):
 
         # 优化目标
         model.compile(loss='categorical_crossentropy',
-                      optimizer=SGD(lr=.1, decay=.01),
+                      # optimizer=SGD(lr=.1, decay=.01),
+                      optimizer=Adam(),
                       metrics=['accuracy'])
 
         # Callbacks -- 模型保存
@@ -143,7 +144,7 @@ if __name__ == '__main__':
                                      'Usage: python classifier_mlp.py --data_path data/data_noise_004_bias_0.json')
     parser.add_argument('--data_path', help='set data source', type=str)
     parser.add_argument('--dense_size_list', nargs='+', help='set sizes of each dense layers', type=int, default=0)
-    parser.add_argument('--epoch', help='set the training epochs', default=200, type=int)
+    parser.add_argument('--epoch', help='set the training epochs', default=1000, type=int)
     parser.add_argument('--batch_size', help='set the training batch size', default=128, type=int)
     parser.add_argument('--regular', help='set the training regularization', default=0.0001, type=float)
     parser.add_argument('--dropout_size', help='set the training regularization', default=1, type=float)

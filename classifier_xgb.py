@@ -26,22 +26,21 @@ from utils.log import init_log
 # 待优化参数
 PARAMS_OPTIMIZE = [
     {
-        'n_estimators': list(range(100, 500, 10)),
-        'silent': [1],
+        'n_estimators': list(range(100, 500, 30)),
         'booster': ['gbtree'],
         'learning_rate': [0.05, 0.1, 0.2]
     }
 ]
 
 # 数据集参数
-# PARAMS_DATASET = {
-#     'noise': [0.005, 0.010, 0.015, 0.020, 0.025, 0.030, 0.035, 0.040, 0.045, 0.050],
-#     'bias': [0]
-# }
 PARAMS_DATASET = {
-    'noise': [0.020],
+    'noise': [0.005, 0.010, 0.015, 0.020, 0.025, 0.030, 0.035, 0.040, 0.045, 0.050],
     'bias': [0]
 }
+# PARAMS_DATASET = {
+#     'noise': [0.020],
+#     'bias': [0]
+# }
 
 
 def load_data(filename):

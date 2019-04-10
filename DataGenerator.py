@@ -6,7 +6,7 @@
 """
 基于机器学习的OAM低截获通信系统设计 -- 数据生成模块
 
-Usage: python DataGenerator.py mixed_modes.txt dataset/noise_002_bias_000.json 0.02
+Usage: python DataGenerator.py mixed_modes_selected.txt --bias 0 --K 15 --noise 0.02
 Authors: Zhou Jialiang
 Email: zjl_sempre@163.com
 Date: 2019-03-26
@@ -14,16 +14,40 @@ Date: 2019-03-26
 
 import argparse
 import json
+import math
+import logging
 import numpy as np
+from utils.log import init_log
 
 # config
-NUM_SAMPLED = 10000
-_2PI_RAD = 2 * np.pi
-RAD_SAMPLED = np.arange(-_2PI_RAD / 2, _2PI_RAD / 2, _2PI_RAD / NUM_SAMPLED).reshape(-1, 1)[:NUM_SAMPLED]
-_2PI_DEG = 360
-DEG_SAMPLED = np.arange(-_2PI_DEG / 2, _2PI_DEG / 2, _2PI_DEG / NUM_SAMPLED).reshape(-1, 1)[:NUM_SAMPLED]
-RAD_TO_DEG = _2PI_DEG / _2PI_RAD
-DEG_TO_RAD = _2PI_RAD / _2PI_DEG
+NUM_SAMPLING = 10000
+RAD_SAMPLING = np.arange(-math.pi, math.pi, 2 * math.pi / NUM_SAMPLING).reshape(-1, 1)[:NUM_SAMPLING]
+NUM_ONE_CLASS_TRAIN = 100
+NUM_ONE_CLASS_TEST = 1000
+
+
+def _get_phase(p_complex):
+    """计算相位
+    需根据象限判断取值，[-180, 180]
+    """
+    real = p_complex.real
+    imag = p_complex.imag
+
+    if abs(real) < 1e-5 and abs(imag) < 1e-5:
+        return 0
+    elif abs(real) < 1e-5 and imag > 0:
+        return 90
+    elif abs(real) < 1e-5 and imag < 0:
+        return -90
+
+    if real > 0 and imag > 0:
+        return math.degrees(math.atan(abs(imag) / abs(real)))
+    elif real > 0 and imag < 0:
+        return -math.degrees(math.atan(abs(imag) / abs(real)))
+    elif real < 0 and imag > 0:
+        return 180 - math.degrees(math.atan(abs(imag) / abs(real)))
+    else:
+        return -180 + math.degrees(math.atan(abs(imag) / abs(real)))
 
 
 class OAMSignal(object):
@@ -44,7 +68,7 @@ class OAMSignal(object):
         """
         return self._amp * np.exp(1j * self._phase)
 
-    def seq_sampled(self, n_samples=15, deg_min=-35, deg_max=35, deg_bias=0):
+    def seq_sampled(self, n_samples, deg_min=-35, deg_max=35, deg_bias=0):
         """仅获取采样数据
 
         Args:
@@ -57,8 +81,8 @@ class OAMSignal(object):
         start = int(NUM_SAMPLED * portion_min)
         end = int(NUM_SAMPLED * portion_max)
         step = int(NUM_SAMPLED * (portion_max - portion_min) / (n_samples - 1))
-        amp_sampled = self._amp[start:end:step]
-        phase_sampled = self._phase[start:end:step]
+        amp_sampled = self._amp[start:end + int(0.5 * step):step]
+        phase_sampled = self._phase[start:end + int(0.5 * step):step]
 
         return amp_sampled * np.exp(1j * phase_sampled)
 
@@ -71,7 +95,7 @@ class Mixer(object):
         _modes_array: numpy.array, 模态组合
         _noise_factor: float, 噪声强度系数
     """
-    def __init__(self, amp_array, mode_array, noise_factor, n_samples=15, bias=0):
+    def __init__(self, amp_array, mode_array, noise_factor, n_samples, bias):
         assert amp_array.shape == mode_array.shape
         self._amp_array = amp_array / amp_array.sum()
         self._mode_array = mode_array
@@ -98,7 +122,7 @@ class Mixer(object):
         mixed_sampled = np.zeros((self._n_samples, 1), dtype=np.complex64)
         for amp, mode in np.hstack((self._amp_array, self._mode_array)):
             oam = OAMSignal(mode=mode, amp=amp)
-            mixed_sampled += oam.seq_sampled(deg_bias=self._bias)
+            mixed_sampled += oam.seq_sampled(deg_bias=self._bias, n_samples=self._n_samples)
         return mixed_sampled
 
     def _add_noise(self, seq):
@@ -113,7 +137,7 @@ class Mixer(object):
         """转换成分贝
         """
         intensity = 20 * np.log10(np.abs(seq))
-        phase = np.arctan(seq.imag / seq.real) * RAD_TO_DEG
+        phase = np.apply_along_axis(func1d=_get_phase, axis=1, arr=seq)
         return intensity, phase
 
     def generate_for_dataset(self):
@@ -150,11 +174,12 @@ class DataGenerator(object):
     """数据产生类
     用于生成指定规模和参数的数据集
     """
-    def __init__(self, filename, num_one_class, noise_factor, n_sampled=15):
+    def __init__(self, filename, num_one_class, noise_factor, n_sampled, bias):
         self._filename = filename
         self._num_one_class = num_one_class
         self._noise_factor = noise_factor
         self._n_sampled = n_sampled
+        self._bias = bias
         self.data = {
             'X': list(),
             'y': list()
@@ -175,7 +200,8 @@ class DataGenerator(object):
 
                 # 生成每一个数据实例
                 for j in range(self._num_one_class):
-                    mixer = Mixer(amp_array=amp_array, mode_array=mode_array, noise_factor=self._noise_factor)
+                    mixer = Mixer(amp_array=amp_array, mode_array=mode_array, noise_factor=self._noise_factor,
+                                  n_samples=self._n_sampled, bias=self._bias)
                     intensity, phase = mixer.generate_for_dataset()
                     self.data['X'].append(intensity.reshape(-1,).tolist() + phase.reshape(-1,).tolist())
                     self.data['y'].append(i)
@@ -186,24 +212,37 @@ class DataGenerator(object):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser('Generate dataset. '
-                                     'Usage: python DataGenerator.py mixed_modes.txt dataset/noise_002_bias_000.json 0.02')
+                                     'Usage: python DataGenerator.py mixed_modes_selected.txt --bias 0 --K 15 --noise 0.02')
     parser.add_argument('mode_filename')
-    parser.add_argument('save_filename')
-    parser.add_argument('noise_factor', help='parameter of noise', type=float)
-    parser.add_argument('--num_sampled', type=int, default=15)
-    parser.add_argument('--bias', type=int, default=0)
-    parser.add_argument('--num_one_class', type=int, default=100)
+    parser.add_argument('--noise', type=float)
+    parser.add_argument('--bias', type=int)
+    parser.add_argument('--K', type=int)
     args = parser.parse_args()
     mode_filename = args.mode_filename
-    save_filename = args.save_filename
-    noise_factor = args.noise_factor
-    num_sampled = args.num_sampled
+    noise = args.noise
     bias = args.bias
-    num_one_class = args.num_one_class
+    K = args.K
 
 
-    data_gen = DataGenerator(filename=mode_filename, num_one_class=num_one_class, noise_factor=noise_factor)
-    data_gen.run()
+    # logger
+    init_log('./logs/data_gen_K_{:02d}_noise_{:04d}_bias_{:03d}'.format(K, int(noise * 1000), bias))
 
-    with open(save_filename, 'w') as f:
-        json.dump(data_gen.data, f, indent=4)
+
+    # generate
+    logging.info('Generating train data of K_{:02d}_noise_{:04d}_bias_{:03d}'.format(K, int(noise * 1000), bias))
+    data_train = DataGenerator(filename=mode_filename, num_one_class=NUM_ONE_CLASS_TRAIN,
+                               noise_factor=noise, n_sampled=K, bias=bias)
+    data_train.run()
+    logging.info('Generating test data of K_{:02d}_noise_{:04d}_bias_{:03d}'.format(K, int(noise * 1000), bias))
+    data_test = DataGenerator(filename=mode_filename, num_one_class=NUM_ONE_CLASS_TEST,
+                              noise_factor=noise, n_sampled=K, bias=bias)
+    data_test.run()
+
+
+    # save
+    save_path_train = 'dataset/K_{:02d}/noise_{:04d}_bias_{:03d}.json'.format(K, int(noise * 1000), bias)
+    save_path_test = 'dataset/K_{:02d}/test_noise_{:04d}_bias_{:03d}.json'.format(K, int(noise * 1000), bias)
+    with open(save_path_train, 'w') as f:
+        json.dump(data_train.data, f, indent=4)
+    with open(save_path_test, 'w') as f:
+        json.dump(data_test.data, f, indent=4)
